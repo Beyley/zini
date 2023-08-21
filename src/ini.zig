@@ -1,6 +1,154 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
-pub fn Ini(comptime ReaderType: type, comptime max_line_size: comptime_int, comptime max_section_size: comptime_int) type {
+///Stringifies the struct
+pub fn stringify(writer: anytype, data: anytype) !void {
+    const Type = @TypeOf(data);
+
+    const type_info: std.builtin.Type.Struct = @typeInfo(Type).Struct;
+
+    inline for (type_info.fields) |field| {
+        const field_type_info: std.builtin.Type = @typeInfo(field.type);
+
+        const field_contents = @field(data, field.name);
+
+        try std.fmt.format(writer, "{s} = ", .{field.name});
+        switch (field_type_info) {
+            .Int, .Float => try std.fmt.format(writer, "{d}", .{field_contents}),
+            .Bool => try std.fmt.format(writer, "{}", .{field_contents}),
+            .Array => |array_info| {
+                if (array_info.child != u8) {
+                    @compileError("Unknown array child type " ++ @typeName(array_info.child));
+                }
+
+                try std.fmt.format(writer, "{s}", .{&field_contents});
+            },
+            .Pointer => |pointer_info| {
+                if (pointer_info.child != u8) {
+                    @compileError("Unknown pointer child type " ++ @typeName(pointer_info.child));
+                }
+
+                if (pointer_info.size != .Slice) {
+                    @compileError("Unable to format non-slices!");
+                }
+
+                try std.fmt.format(writer, "{s}", .{field_contents});
+            },
+            else => @compileError("Unknown type " ++ @typeName(field.type)),
+        }
+        try std.fmt.format(writer, line_ending, .{});
+    }
+}
+
+pub fn readStruct(reader: anytype, comptime T: type, allocator: std.mem.Allocator) !T {
+    const Ini = IniReader(@TypeOf(reader), 4096, 4096);
+
+    var ini = Ini.init(reader);
+
+    const type_info = @typeInfo(T).Struct;
+
+    var ret = T{};
+
+    while (try ini.next()) |next| {
+        inline for (type_info.fields) |field| {
+            if (std.mem.eql(u8, field.name, next.key)) {
+                const field_type_info = @typeInfo(field.type);
+                switch (field_type_info) {
+                    .Int => @field(ret, field.name) = try std.fmt.parseInt(field.type, next.value, 0),
+                    .Float => @field(ret, field.name) = try std.fmt.parseFloat(field.type, next.value),
+                    .Bool => {
+                        if (std.ascii.eqlIgnoreCase(next.value, "true") or
+                            std.ascii.eqlIgnoreCase(next.value, "yes"))
+                        {
+                            @field(ret, field.name) = true;
+                        } else if (std.ascii.eqlIgnoreCase(next.value, "false") or
+                            std.ascii.eqlIgnoreCase(next.value, "no"))
+                        {
+                            @field(ret, field.name) = false;
+                        } else {
+                            return error.ParseErrorInvalidBool;
+                        }
+                    },
+                    .Pointer => |pointer_info| {
+                        if (pointer_info.child != u8) {
+                            @compileError("Unknown pointer child type " ++ @typeName(pointer_info.child));
+                        }
+
+                        if (pointer_info.size != .Slice) {
+                            @compileError("Unable to format non-slices!");
+                        }
+
+                        @field(ret, field.name) = allocator.dupe(u8, next.value);
+                    },
+                    else => @compileError("Unknown type " ++ @typeName(field.type)),
+                }
+                break;
+            }
+        }
+    }
+
+    return ret;
+}
+
+pub const line_ending = if (builtin.os.tag == .windows) "\r\n" else "\n";
+
+test "read basic struct" {
+    var str =
+        \\boolean_1=yes
+        \\boolean_2=no
+        \\boolean_3=true
+        \\boolean_4=false
+        \\
+        \\int_1 =   0
+        \\int_2 =   044
+        \\int_3 =   05783
+        \\int_4 =   051412
+        \\int_5 =   078990  
+        \\
+        \\float_1 = 1.014185
+        \\float_2 = 41941.15617
+    ;
+    var stream = std.io.fixedBufferStream(str);
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    const TestRead = struct {
+        boolean_1: bool = true,
+        boolean_2: bool = false,
+        boolean_3: bool = true,
+        boolean_4: bool = false,
+        int_1: i32 = 0,
+        int_2: u32 = 44,
+        int_3: u128 = 5783,
+        int_4: i32 = 51412,
+        int_5: i64 = 78990,
+        float_1: f64 = 1.014185,
+        float_2: f32 = 41941.15617,
+    };
+
+    try std.testing.expectEqualDeep(TestRead{}, try readStruct(stream.reader(), TestRead, arena.allocator()));
+}
+
+test "write basic struct" {
+    const str = "boolean_1 = true" ++ line_ending ++ "boolean_2 = false" ++ line_ending;
+
+    const TestWrite = struct {
+        boolean_1: bool = true,
+        boolean_2: bool = false,
+    };
+
+    var data = TestWrite{};
+
+    var out = std.ArrayList(u8).init(std.testing.allocator);
+    defer out.deinit();
+
+    try stringify(out.writer(), data);
+
+    try std.testing.expectEqualStrings(str, out.items);
+}
+
+pub fn IniReader(comptime ReaderType: type, comptime max_line_size: comptime_int, comptime max_section_size: comptime_int) type {
     return struct {
         read_section: bool,
         read_buf: [max_line_size]u8,
