@@ -78,7 +78,7 @@ pub fn readStruct(reader: anytype, comptime T: type, allocator: std.mem.Allocato
                             @compileError("Unable to format non-slices!");
                         }
 
-                        @field(ret, field.name) = allocator.dupe(u8, next.value);
+                        @field(ret, field.name) = try allocator.dupe(u8, next.value);
                     },
                     else => @compileError("Unknown type " ++ @typeName(field.type)),
                 }
