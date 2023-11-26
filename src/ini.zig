@@ -93,7 +93,7 @@ pub fn readStruct(reader: anytype, comptime T: type, allocator: std.mem.Allocato
 pub const line_ending = if (builtin.os.tag == .windows) "\r\n" else "\n";
 
 test "read basic struct" {
-    var str =
+    const str =
         \\boolean_1=yes
         \\boolean_2=no
         \\boolean_3=true
@@ -138,7 +138,7 @@ test "write basic struct" {
         boolean_2: bool = false,
     };
 
-    var data = TestWrite{};
+    const data = TestWrite{};
 
     var out = std.ArrayList(u8).init(std.testing.allocator);
     defer out.deinit();
@@ -159,7 +159,7 @@ pub fn IniReader(comptime ReaderType: type, comptime max_line_size: comptime_int
         const Self = @This();
 
         pub fn init(reader: ReaderType) Self {
-            var self = Self{
+            const self = Self{
                 .read_buf = undefined,
                 .current_section = undefined,
                 .current_section_len = 0,
