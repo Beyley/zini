@@ -4,10 +4,10 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    _ = b.addModule("zini", .{ .root_source_file = .{ .path = "src/ini.zig" } });
+    _ = b.addModule("zini", .{ .root_source_file = b.path("src/ini.zig") });
 
     const main_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/ini.zig" },
+        .root_source_file = b.path("src/ini.zig"),
         .target = target,
         .optimize = optimize,
     });
