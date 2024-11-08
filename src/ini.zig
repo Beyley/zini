@@ -5,7 +5,7 @@ const builtin = @import("builtin");
 pub fn stringify(writer: anytype, data: anytype) !void {
     const Type = @TypeOf(data);
 
-    const type_info: std.builtin.Type.Struct = @typeInfo(Type).Struct;
+    const type_info: std.builtin.Type.Struct = @typeInfo(Type).@"struct";
 
     inline for (type_info.fields) |field| {
         const field_type_info: std.builtin.Type = @typeInfo(field.type);
@@ -14,16 +14,16 @@ pub fn stringify(writer: anytype, data: anytype) !void {
 
         try std.fmt.format(writer, "{s} = ", .{field.name});
         switch (field_type_info) {
-            .Int, .Float => try std.fmt.format(writer, "{d}", .{field_contents}),
-            .Bool => try std.fmt.format(writer, "{}", .{field_contents}),
-            .Array => |array_info| {
+            .int, .float => try std.fmt.format(writer, "{d}", .{field_contents}),
+            .bool => try std.fmt.format(writer, "{}", .{field_contents}),
+            .array => |array_info| {
                 if (array_info.child != u8) {
                     @compileError("Unknown array child type " ++ @typeName(array_info.child));
                 }
 
                 try std.fmt.format(writer, "{s}", .{&field_contents});
             },
-            .Pointer => |pointer_info| {
+            .pointer => |pointer_info| {
                 if (pointer_info.child != u8) {
                     @compileError("Unknown pointer child type " ++ @typeName(pointer_info.child));
                 }
@@ -45,7 +45,7 @@ pub fn readStruct(reader: anytype, comptime T: type, allocator: std.mem.Allocato
 
     var ini = Ini.init(reader);
 
-    const type_info = @typeInfo(T).Struct;
+    const type_info = @typeInfo(T).@"struct";
 
     var ret = T{};
 
@@ -54,9 +54,9 @@ pub fn readStruct(reader: anytype, comptime T: type, allocator: std.mem.Allocato
             if (std.mem.eql(u8, field.name, next.key)) {
                 const field_type_info = @typeInfo(field.type);
                 switch (field_type_info) {
-                    .Int => @field(ret, field.name) = try std.fmt.parseInt(field.type, next.value, 0),
-                    .Float => @field(ret, field.name) = try std.fmt.parseFloat(field.type, next.value),
-                    .Bool => {
+                    .int => @field(ret, field.name) = try std.fmt.parseInt(field.type, next.value, 0),
+                    .float => @field(ret, field.name) = try std.fmt.parseFloat(field.type, next.value),
+                    .bool => {
                         if (std.ascii.eqlIgnoreCase(next.value, "true") or
                             std.ascii.eqlIgnoreCase(next.value, "yes"))
                         {
@@ -69,7 +69,7 @@ pub fn readStruct(reader: anytype, comptime T: type, allocator: std.mem.Allocato
                             return error.ParseErrorInvalidBool;
                         }
                     },
-                    .Pointer => |pointer_info| {
+                    .pointer => |pointer_info| {
                         if (pointer_info.child != u8) {
                             @compileError("Unknown pointer child type " ++ @typeName(pointer_info.child));
                         }
